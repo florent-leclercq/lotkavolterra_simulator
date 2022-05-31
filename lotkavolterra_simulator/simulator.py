@@ -109,7 +109,7 @@ class LVobserver(object):
         import numpy as np
         return np.arange(self.tmax)
 
-    def signal(self, Xtrue, Ytrue, t, **metaparams):
+    def make_signal(self, Xtrue, Ytrue, t, **metaparams):
         """Simulate the signal. The (unobserved) signal is a retarded and non-linear
         observation of the true underlying functions.
 
@@ -317,6 +317,8 @@ class LVobserver(object):
 
         Parameters
         ----------
+        model : int, optional, default=0
+            0= correct data model; 1=misspecified data model
         threshold : double
             maximum number of individuals (preys or predators) that can be observed
         mask : array, double, dimension=n
@@ -339,7 +341,7 @@ class LVobserver(object):
             # Simulate the observation process using the full data model
 
             # signal
-            Xsignal, Ysignal = self.signal(self.Xtrue, self.Ytrue, self.t, **metaparams)
+            Xsignal, Ysignal = self.make_signal(self.Xtrue, self.Ytrue, self.t, **metaparams)
             s=np.concatenate((Xsignal, Ysignal))
 
             # noise covariance

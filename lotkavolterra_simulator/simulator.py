@@ -71,6 +71,110 @@ class LVsimulator(object):
             X[n+1] = X[n]*(1 + self.alpha*dt - self.beta*dt*Y[n])
             Y[n+1] = Y[n]*(1 - self.delta*dt + self.gamma*dt*X[n])
         return X, Y
+
+    @property
+    def omega(self):
+        """array, double, dimension=4 : vector of parameters
+        """
+        import numpy as np
+        return np.array((self.alpha, self.beta, self.gamma, self.delta))
+
+    @staticmethod
+    def get_XY(t_s, tres, Xth, Yth):
+        """two array, double, dimension=2*n: subsamples in time to get X and Y.
+        """
+        import numpy as np
+        X=np.array([Xth[tres*n] for n in range(len(t_s))])
+        Y=np.array([Yth[tres*n] for n in range(len(t_s))])
+
+        return X, Y
+
+    @staticmethod
+    def get_theta(X, Y):
+        """array, double, dimension=2*n: concatenates X and Y.
+        """
+        import numpy as np
+        return np.concatenate((X, Y))
+
+    def compute_theta(self, omega, t, t_s, tres):
+        """Solves the Lotka-Volterra system of equations and
+        returns theta, the latent function that is the next layer
+        of the Bayesian hierarchical model.
+
+        Parameters
+        ----------
+        t : array, double, dimension=n
+            array of time values where we approximate X and Y values
+            timestep at each iteration is given by t[n+1] - t[n].
+        t_s : array, double, dimension=S
+            array of the support time vales where theta is defined
+        tres : double
+            time resolution, defined such that:
+            t = np.linspace(0,tmax-1,tmax*tres+1)
+            t_s = np.arange(tmax)
+
+        Returns
+        -------
+        theta : array, double, dimension=S
+            vector of values of the latent function at t_s
+
+        """
+        LV = LVsimulator(self.X0, self.Y0, omega[0], omega[1], omega[2], omega[3])
+        Xtheory, Ytheory = LV.EEuler(t)
+        X, Y = LV.get_XY(t_s, tres, Xtheory, Ytheory)
+        theta = LV.get_theta(X, Y)
+        return theta
+
+    def compute_dtheta_domega(self, t, t_s, tres, Delta_omega):
+        """Computes the gradient of the latent function theta with respect to
+        the parameters omega, using finite differences.
+
+        Parameters
+        ----------
+        t : array, double, dimension=n
+            array of time values where we approximate X and Y values
+            timestep at each iteration is given by t[n+1] - t[n].
+        t_s : array, double, dimension=S
+            array of the support time vales where theta is defined
+        tres : double
+            time resolution, defined such that:
+            t = np.linspace(0,tmax-1,tmax*tres+1)
+            t_s = np.arange(tmax)
+        Delta_omega : double
+            step size for finite differences
+
+        Returns
+        -------
+        grad_theta : array, double, dimension=(2*S, 4)
+            gradient of theta with respect to omega
+
+        """
+        import numpy as np
+        omega0 = self.omega
+        tmax = len(t_s)
+        grad_theta = np.zeros((2*tmax,4))
+        theta_0 = self.compute_theta(omega0, t, t_s, tres)
+
+        for n in range(4):
+            omega_p1, omega_p2, omega_p3, omega_m1, omega_m2, omega_m3 = np.copy(omega0), np.copy(omega0), np.copy(omega0), np.copy(omega0), np.copy(omega0), np.copy(omega0)
+            omega_p1[n] += 1*Delta_omega
+            omega_p2[n] += 2*Delta_omega
+            omega_p3[n] += 3*Delta_omega
+            omega_m1[n] -= 1*Delta_omega
+            omega_m2[n] -= 2*Delta_omega
+            omega_m3[n] -= 3*Delta_omega
+            theta_p1 = self.compute_theta(omega_p1, t, t_s, tres)
+            theta_p2 = self.compute_theta(omega_p2, t, t_s, tres)
+            theta_p3 = self.compute_theta(omega_p3, t, t_s, tres)
+            theta_m1 = self.compute_theta(omega_m1, t, t_s, tres)
+            theta_m2 = self.compute_theta(omega_m2, t, t_s, tres)
+            theta_m3 = self.compute_theta(omega_m3, t, t_s, tres)
+            #grad_theta[:,n]=(theta_p1 - theta_0)/Delta_omega
+            #grad_theta[:,n]=(-1/2.*theta_m1 + 1/2.*theta_p1)/Delta_omega
+            #grad_theta[:,n]=(1/12.*theta_m2 - 2/3.*theta_m1 + 2/3.*theta_p1 - 1/12.*theta_p2)/Delta_omega
+            grad_theta[:,n]=(-1/60.*theta_m3 + 3/20.*theta_m2 - 3/4.*theta_m1 + 3/4.*theta_p1 - 3/20.*theta_p2 + 1/60.*theta_p3)/Delta_omega
+
+        return grad_theta
 #end class(LVsimulator)
 
 class LVobserver(object):

@@ -109,19 +109,17 @@ class LVobserver(object):
         import numpy as np
         return np.arange(self.tmax)
 
-    def make_signal(self, Xtrue, Ytrue, t, **metaparams):
-        """Simulate the signal. The (unobserved) signal is a retarded and non-linear
-        observation of the true underlying functions.
+    def make_signal(self, **metaparams):
+        """Simulate the signal.
 
         Parameters
         ----------
-        Xtrue : array, double, dimension=n
-            true number of preys to be observed
-        Ytrue : array, double, dimension=n
-            true number of predators to be observed
-        t : array, double, dimension=n
-            array of time values where we compute Xsignal and Ysignal values
-            timestep at each iteration is given by t[n+1] - t[n].
+        model : int, optional, default=0
+            0= correct data model; 1=misspecified data model
+        Xefficiency : array, double, dimension=len(t)
+            detection efficiency of preys as a function of time
+        Yefficiency : array, double, dimension=len(t)
+            detection efficiency of preys as a function of time
         P : double
             rate of prey misses due to correlation between preys and predators
         Q : double
@@ -136,21 +134,35 @@ class LVobserver(object):
 
         """
         import numpy as np
-        P=metaparams["P"]
-        Q=metaparams["Q"]
+        t=self.t
         X0=self.X0
         Y0=self.Y0
+        Xtrue=self.Xtrue
+        Ytrue=self.Ytrue
 
-        Xsignal = np.zeros(len(t)) # Pre-allocate the memory for Xsignal
-        Ysignal = np.zeros(len(t)) # Pre-allocate the memory for Ysignal
+        Xsignal, Ysignal = self.Xtrue, self.Ytrue
+        if not "model" in metaparams or metaparams["model"] == 0:
+            # correct data model: The (unobserved) signal is a retarded and non-linear
+            # observation of the true underlying functions.
+            P=metaparams["obsP"]
+            Q=metaparams["obsQ"]
+            Xefficiency=metaparams["Xefficiency"]
+            Yefficiency=metaparams["Yefficiency"]
 
-        Xsignal[0] = X0
-        Ysignal[0] = Y0
+            Xretard = np.roll(Xtrue,1)
+            Yretard = np.roll(Ytrue,1)
 
-        for n in range(len(t)-1):
-            dt = t[n+1] - t[n]
-            Xsignal[n+1] = Xtrue[n] - P*Xtrue[n]*Ytrue[n]*dt
-            Ysignal[n+1] = Ytrue[n] - Q*Xtrue[n]*Ytrue[n]*dt
+            Xsignal = Xretard - P*Xretard*Yretard + Q*Xretard**2
+            Xsignal *= Xefficiency
+            Ysignal = Yretard + P*Xretard*Yretard - Q*Yretard**2
+            Ysignal *= Yefficiency
+
+            Xsignal[0] = X0
+            Ysignal[0] = Y0
+        elif "model" == 1:
+            # misspecified data model : consider that the measurement is a direct
+            # observation of the function.
+            pass
 
         return Xsignal, Ysignal
 
@@ -160,7 +172,7 @@ class LVobserver(object):
 
         Parameters
         ----------
-        R : double
+        obsR : double
             strength of demographic noise
 
         Returns
@@ -172,18 +184,41 @@ class LVobserver(object):
         import numpy as np
         Xtrue=self.Xtrue
         Ytrue=self.Ytrue
-        R=metaparams["R"]
-        tmax=self.tmax
+        obsR=metaparams["obsR"]
 
-        D00=np.diag(Xtrue)
-        D01=np.zeros((tmax,tmax))
-        D10=np.zeros((tmax,tmax))
-        D11=np.diag(Ytrue)
-        D=np.block([ [R*D00, R*D01], [R*D10, R*D11] ])
+        D=obsR*np.diag(np.concatenate((Xtrue, Ytrue)))
 
         return D
 
-    def Onoise_cov(self, **metaparams):
+    def make_demographic_noise(self, **metaparams):
+        """Simulate demographic noise.
+        Demographic noise depends only on the observed population.
+
+        Parameters
+        ----------
+        obsR : double
+            strength of demographic noise
+
+        Returns
+        -------
+        XDnoise : array, double, dimension=n
+            demographic noise for preys
+        YDnoise : array, double, dimension=n
+            demographic noise for predators
+
+        """
+        import numpy as np
+        import scipy.stats as ss
+        Xtrue=self.Xtrue
+        Ytrue=self.Ytrue
+        obsR=metaparams["obsR"]
+
+        XDnoise = np.sqrt(obsR*Xtrue) * ss.multivariate_normal(mean=np.zeros_like(Xtrue)).rvs()
+        YDnoise = np.sqrt(obsR*Ytrue) * ss.multivariate_normal(mean=np.zeros_like(Xtrue)).rvs()
+
+        return XDnoise, YDnoise
+
+    def Onoise_cov(self, X, Y, **metaparams):
         """Covariance matrix for the observational noise.
         Prey and predator populations introduce a noise to the other
         population, and there is also a non-diagonal term
@@ -191,9 +226,9 @@ class LVobserver(object):
 
         Parameters
         ----------
-        S : double
+        obsS : double
             overall strength of observational noise
-        T : double
+        obsT : double
             strength of non-diagonal term in observational noise
 
         Returns
@@ -207,75 +242,93 @@ class LVobserver(object):
 
         """
         import numpy as np
-        Xtrue=self.Xtrue
-        Ytrue=self.Ytrue
-        S=metaparams["S"]
-        T=metaparams["T"]
+        obsS=metaparams["obsS"]
+        obsT=metaparams["obsT"]
 
-        O00=np.diag(Ytrue)
-        O01=T*np.diag(np.sqrt(Ytrue*Xtrue))
-        O10=T*np.diag(np.sqrt(Ytrue*Xtrue))
-        O11=np.diag(Xtrue)
-        O=np.block([ [S*O00, S*O01], [S*O10, S*O11] ])
+        O00=np.diag(Y)
+        O01=obsT*np.diag(np.sqrt(X*Y))
+        O10=obsT*np.diag(np.sqrt(X*Y))
+        O11=np.diag(X)
+        O=np.block([ [obsS*O00, obsS*O01], [obsS*O10, obsS*O11] ])
 
         return O
 
-    def noise_cov(self, **metaparams):
-        """Full noise covariance matrix.
+    def make_observational_noise(self, Xsignal, Ysignal, **metaparams):
+        """Simulate observational noise.
 
         Parameters
         ----------
-        R : double
-            strength of demographic noise
-        S : double
+        obsS : double
             overall strength of observational noise
-        T : double
+        obsT : double
             strength of non-diagonal term in observational noise
 
         Returns
         -------
-        N : array, double, dimension=(2*n,2*n)
-            full noise covariance matrix, sum of the demographic
-            and observational noise covariance matrices, N=D+O.
+        XOnoise : array, double, dimension=n
+            observational noise for preys
+        YOnoise : array, double, dimension=n
+            observational noise for predators
 
         """
+        import numpy as np
+        import scipy.stats as ss
+        from scipy.linalg import sqrtm
+        tmax=self.tmax
 
-        # demographic noise
-        D=self.Dnoise_cov(**metaparams)
+        # Writing this in a single call to multivariate_normal causes numerical instabilities
+        XOnoise = np.zeros(tmax) # Pre-allocate the memory for XOnoise
+        YOnoise = np.zeros(tmax) # Pre-allocate the memory for YOnoise
+        for n in range(tmax-1):
+            O = self.Onoise_cov(np.array([Xsignal[n]]), np.array([Ysignal[n]]), **metaparams)
+            XOnoise[n], YOnoise[n] = ss.multivariate_normal(mean=[0,0], cov=O).rvs()
 
-        # observational noise
-        O=self.Onoise_cov(**metaparams)
+        return XOnoise, YOnoise
 
-        # total noise covariance matrix
-        N=D+O
-
-        return N
-
-    def simulate_obs(self, s, N):
-        """Simulate the observational process, assuming that
-        data = signal + noise
+    def simulate_obs(self, Xsignal, Ysignal, **metaparams):
+        """Simulate the observational process, assuming additive noise, i.e.
+        data = signal + noise.
 
         Parameters
         ----------
-        s : array, double, dimension=2*n
-            unobserved intrinsic signal
-        N : array, double, dimension=(2*n,2*n)
-            noise covariance matrix
+        Xsignal : array, double, dimension=n
+            unobserved signal for the number of preys
+        Ysignal : array, double, dimension=n
+            unobserved signal for the number of predators
+        model : int, optional, default=0
+            0= correct data model; 1=misspecified data model
+        obsR : double
+            strength of demographic noise
+        obsS : double
+            overall strength of observational noise
+        obsT : double
+            strength of non-diagonal term in observational noise
 
         """
         import numpy as np
         import scipy.stats as ss
         tmax=self.tmax
 
-        # draw noise
-        n = ss.multivariate_normal(mean=np.zeros(2*tmax), cov=N).rvs()
+        # draw demographic noise
+        XDnoise, YDnoise = self.make_demographic_noise(**metaparams)
 
-        # data=signal+noise
-        data = s+n
+        # observational noise
+        XOnoise, YOnoise = np.zeros_like(XDnoise), np.zeros_like(YDnoise)
+        if not "model" in metaparams or metaparams["model"] == 0:
+            # correct data model: draw observational noise
+            XOnoise, YOnoise = self.make_observational_noise(Xsignal, Ysignal, **metaparams)
+        elif "model" == 1:
+            # misspecified data model : only consider demographic noise
+            pass
+
+        # data = signal+noise
+        self.Xdata = Xsignal+XDnoise+XOnoise
+        self.Ydata = Ysignal+YDnoise+YOnoise
+
         self.Xobs = np.arange(tmax)
         self.Yobs = np.arange(tmax)
-        self.Xdata = data[0:tmax]
-        self.Ydata = data[tmax:2*tmax]
+
+        return Xsignal, XDnoise, XOnoise, self.Xdata, Ysignal, YDnoise, YOnoise, self.Ydata
 
     def censor(self, **metaparams):
         """Censor part of the data during periods
@@ -304,13 +357,17 @@ class LVobserver(object):
 
         """
         import numpy as np
-        threshold=metaparams["threshold"]
 
-        # threshold data
-        self.Xdata[np.where(self.Xdata>threshold)]=threshold
-        self.Ydata[np.where(self.Ydata>threshold)]=threshold
-        self.Xdata[np.where(self.Xdata<0)]=0
-        self.Ydata[np.where(self.Ydata<0)]=0
+        if not "model" in metaparams or metaparams["model"] == 0:
+            # correct data model: threshold data
+            threshold=metaparams["threshold"]
+            self.Xdata[np.where(self.Xdata>threshold)]=threshold
+            self.Ydata[np.where(self.Ydata>threshold)]=threshold
+            self.Xdata[np.where(self.Xdata<0)]=0
+            self.Ydata[np.where(self.Ydata<0)]=0
+        elif "model" == 1:
+            # misspecified data model : do not threshold data
+            pass
 
     def observe(self, **metaparams):
         """Simulate the observation process using a given data model.
@@ -337,40 +394,16 @@ class LVobserver(object):
         """
         import numpy as np
 
-        if not "model" in metaparams or metaparams["model"] == 0:
-            # Simulate the observation process using the full data model
+        # Simulate the observation process using a given data model
 
-            # signal
-            Xsignal, Ysignal = self.make_signal(self.Xtrue, self.Ytrue, self.t, **metaparams)
-            s=np.concatenate((Xsignal, Ysignal))
+        # signal
+        Xsignal, Ysignal = self.make_signal(**metaparams)
 
-            # noise covariance
-            N = self.noise_cov(**metaparams)
+        # simulate observation using correct data model
+        self.simulate_obs(Xsignal, Ysignal, **metaparams)
 
-            # simulate observation
-            self.simulate_obs(s, N)
-
-            # censor and threshold data
-            self.censor(**metaparams)
-            self.threshold(**metaparams)
-
-        elif metaparams["model"] == 1:
-            # Simulate the observation process using a misspecified data model.
-
-            Xtrue=self.Xtrue
-            Ytrue=self.Ytrue
-
-            # signal: consider that the measurement is a direct observation of the function
-            Xsignal, Ysignal = Xtrue, Ytrue
-            s=np.concatenate((Xsignal, Ysignal))
-
-            # noise covariance: only consider demographic noise
-            N = self.Dnoise_cov(**metaparams)
-
-            # simulate observation
-            self.simulate_obs(s, N)
-
-            # censor, but do not threshold data
-            self.censor(**metaparams)
+        # censor and threshold data
+        self.censor(**metaparams)
+        self.threshold(**metaparams)
 
 #end class(LVobserver)

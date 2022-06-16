@@ -69,7 +69,7 @@ class LVsimulator(object):
         for n in range(len(t)-1):
             dt = t[n+1] - t[n]
             X[n+1] = X[n]*(1 + self.alpha*dt - self.beta*dt*Y[n])
-            Y[n+1] = Y[n]*(1 - self.delta*dt + self.gamma*dt*X[n])
+            Y[n+1] = Y[n]*(1 - self.gamma*dt + self.delta*dt*X[n])
         return X, Y
 
     @property

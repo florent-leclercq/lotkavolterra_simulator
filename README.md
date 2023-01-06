@@ -4,7 +4,7 @@
 [![GitHub version](https://img.shields.io/github/tag/florent-leclercq/lotkavolterra_simulator.svg?label=version)](https://github.com/florent-leclercq/lotkavolterra_simulator)
 [![GitHub commits](https://img.shields.io/github/commits-since/florent-leclercq/lotkavolterra_simulator/v1.0.svg)](https://github.com/florent-leclercq/lotkavolterra_simulator/commits)
 [![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/florent-leclercq/lotkavolterra_simulator/blob/main/LICENSE)
-[![PyPI version](https://badge.fury.io/py/lotkavolterra_simulator.svg)](https://badge.fury.io/py/lotkavolterra_simulator)
+[![PyPI version](https://badge.fury.io/py/lotkavolterra-simulator.svg)](https://badge.fury.io/py/lotkavolterra-simulator)
 [![Website florent-leclercq.eu](https://img.shields.io/website-up-down-green-red/http/pyselfi.florent-leclercq.eu.svg)](http://pyselfi.florent-leclercq.eu/)
 
 Simulator of the Lotka-Volterra prey-predator system, with demographic and observational noise and biases.

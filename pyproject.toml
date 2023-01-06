@@ -1,22 +1,27 @@
-[build-system]
-requires = ["setuptools>=61.0","numpy","scipy"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "lotkavolterra_simulator"
 version = "1.0"
-authors = [
-  { name="Florent Leclercq", email="florent.leclercq@polytechnique.org" },
-]
 description = "Simulator of the Lotka-Volterra prey-predator system with demographic and observational noise and biases"
 readme = "README.md"
 requires-python = ">=3.7"
+license = {file = "LICENSE"}
+authors = [
+  { name="Florent Leclercq", email="florent.leclercq@iap.fr" },
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+  "numpy",
+  "scipy",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/florent-leclercq/lotkavolterra_simulator"
 "Bug Tracker" = "https://github.com/florent-leclercq/lotkavolterra_simulator/issues"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
